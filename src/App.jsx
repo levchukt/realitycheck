@@ -1,5 +1,23 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
+const QUOTES = [
+  { text: "Намір не потребує зусиль. Він просто є — як факт, що вже відбувся.", source: "Трансерфінг реальності" },
+  { text: "Ти не повинен боротися з реальністю. Просто вибери іншу.", source: "Трансерфінг реальності" },
+  { text: "Надлишковий потенціал виникає тоді, коли ти надаєш речам більшого значення, ніж вони мають насправді.", source: "Трансерфінг реальності" },
+  { text: "Слайд — це живий образ тієї реальності, яку ти хочеш отримати. Входь у нього кожного дня.", source: "Трансерфінг реальності" },
+  { text: "Зовнішній намір не просить і не намагається. Він просто бере те, що вже належить йому.", source: "Трансерфінг реальності" },
+  { text: "Думки матеріальні — не як мрія, а як константа. Те, про що ти думаєш постійно, стає твоєю реальністю.", source: "Трансерфінг реальності" },
+  { text: "Не борись з течією. Просто вибери іншу річку.", source: "Трансерфінг реальності" },
+  { text: "Якщо ти дозволяєш собі мати — воно приходить. Якщо ти прагнеш отримати — воно тікає.", source: "Трансерфінг реальності" },
+  { text: "Відпусти контроль над результатом — і результат прийде сам.", source: "Трансерфінг реальності" },
+  { text: "Хвилі варіантів існують незалежно від тебе. Твоє завдання — просто настроїтись на потрібну.", source: "Трансерфінг реальності" },
+  { text: "Страх і тривога притягують те, чого ти боїшся. Спокій і впевненість притягують те, чого ти хочеш.", source: "Трансерфінг реальності" },
+  { text: "Ти вже маєш все необхідне. Просто перестань сумніватись у цьому.", source: "Трансерфінг реальності" },
+  { text: "Реальність — це дзеркало. Воно відображає не твої бажання, а твій внутрішній стан.", source: "Трансерфінг реальності" },
+  { text: "Константація — це не самонавіювання. Це тиха впевненість у тому, що вже є.", source: "Трансерфінг реальності" },
+  { text: "Зовнішній намір живе в просторі варіантів. Внутрішній намір — лише у твоїй голові.", source: "Трансерфінг реальності" },
+];
+
 const PRESETS = [
   {
     id: "theta",
@@ -106,6 +124,20 @@ export default function ZelandSound() {
   const [elapsed, setElapsed] = useState(0);
   const [duration, setDuration] = useState(10);
   const [finished, setFinished] = useState(false);
+  const [quoteIndex, setQuoteIndex] = useState(() => Math.floor(Math.random() * QUOTES.length));
+  const [quoteFade, setQuoteFade] = useState(true);
+
+  const nextQuote = () => {
+    setQuoteFade(false);
+    setTimeout(() => {
+      setQuoteIndex((i) => {
+        let next = i;
+        while (next === i) next = Math.floor(Math.random() * QUOTES.length);
+        return next;
+      });
+      setQuoteFade(true);
+    }, 300);
+  };
 
   const audioCtxRef = useRef(null);
   const nodesRef = useRef([]);
@@ -438,6 +470,35 @@ export default function ZelandSound() {
               >{m}</button>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* Quote */}
+      <div style={{
+        width: "100%", maxWidth: "440px",
+        marginTop: "16px",
+        background: "rgba(255,255,255,0.02)",
+        border: "1px solid rgba(255,255,255,0.06)",
+        borderRadius: "16px",
+        padding: "20px 24px",
+        opacity: quoteFade ? 1 : 0,
+        transition: "opacity 0.3s ease",
+      }}>
+        <div style={{ fontSize: "10px", letterSpacing: "3px", color: "#334155", textTransform: "uppercase", marginBottom: "12px" }}>Цитата</div>
+        <p style={{ margin: "0 0 12px", fontSize: "14px", color: "#94a3b8", lineHeight: "1.7", fontWeight: "300", fontStyle: "italic" }}>
+          «{QUOTES[quoteIndex].text}»
+        </p>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: "11px", color: "#334155" }}>{QUOTES[quoteIndex].source}</span>
+          <button onClick={nextQuote} style={{
+            background: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            borderRadius: "8px",
+            color: "#475569",
+            fontSize: "11px",
+            padding: "5px 12px",
+            cursor: "pointer",
+          }}>інша →</button>
         </div>
       </div>
 
