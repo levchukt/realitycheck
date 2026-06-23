@@ -94,10 +94,8 @@ function createBrownNoise(ctx) {
   return node;
 }
 
-// Tibetan bowl-like bell: layered sine with slow decay
 function playBell(ctx, volume = 0.5) {
   const now = ctx.currentTime;
-  // Three partials for a rich bowl sound
   const partials = [
     { freq: 432, gain: 0.5, decay: 4.0 },
     { freq: 864, gain: 0.25, decay: 2.5 },
@@ -127,6 +125,16 @@ export default function ZelandSound() {
   const [quoteIndex, setQuoteIndex] = useState(() => Math.floor(Math.random() * QUOTES.length));
   const [quoteFade, setQuoteFade] = useState(true);
 
+  const audioCtxRef = useRef(null);
+  const nodesRef = useRef([]);
+  const masterGainRef = useRef(null);
+  const timerRef = useRef(null);
+  const durationRef = useRef(duration);
+  const volumeRef = useRef(volume);
+
+  useEffect(() => { durationRef.current = duration; }, [duration]);
+  useEffect(() => { volumeRef.current = volume; }, [volume]);
+
   const nextQuote = () => {
     setQuoteFade(false);
     setTimeout(() => {
@@ -139,22 +147,10 @@ export default function ZelandSound() {
     }, 300);
   };
 
-  const audioCtxRef = useRef(null);
-  const nodesRef = useRef([]);
-  const masterGainRef = useRef(null);
-  const timerRef = useRef(null);
-  const durationRef = useRef(duration);
-  const volumeRef = useRef(volume);
-
-  useEffect(() => { durationRef.current = duration; }, [duration]);
-  useEffect(() => { volumeRef.current = volume; }, [volume]);
-
   const stopAudio = useCallback((withBell = false) => {
     clearInterval(timerRef.current);
-
     if (withBell && audioCtxRef.current) {
       playBell(audioCtxRef.current, volumeRef.current);
-      // fade out main audio
       if (masterGainRef.current) {
         masterGainRef.current.gain.setValueAtTime(masterGainRef.current.gain.value, audioCtxRef.current.currentTime);
         masterGainRef.current.gain.linearRampToValueAtTime(0, audioCtxRef.current.currentTime + 1.5);
@@ -168,12 +164,8 @@ export default function ZelandSound() {
     } else {
       nodesRef.current.forEach((n) => { try { n.stop?.(); n.disconnect?.(); } catch {} });
       nodesRef.current = [];
-      if (audioCtxRef.current) {
-        try { audioCtxRef.current.close(); } catch {}
-        audioCtxRef.current = null;
-      }
+      if (audioCtxRef.current) { try { audioCtxRef.current.close(); } catch {} audioCtxRef.current = null; }
     }
-
     audioCtxRef.current = null;
     masterGainRef.current = null;
     setIsPlaying(false);
@@ -181,7 +173,6 @@ export default function ZelandSound() {
   }, []);
 
   const startAudio = useCallback((preset) => {
-    // full stop first (no bell)
     clearInterval(timerRef.current);
     nodesRef.current.forEach((n) => { try { n.stop?.(); n.disconnect?.(); } catch {} });
     nodesRef.current = [];
@@ -225,7 +216,6 @@ export default function ZelandSound() {
 
     leftOsc.start();
     rightOsc.start();
-
     nodesRef.current = [leftOsc, rightOsc, { disconnect: () => { noiseNode.disconnect(); noiseGain.disconnect(); } }];
 
     setIsPlaying(true);
@@ -236,7 +226,6 @@ export default function ZelandSound() {
         if (next >= durationRef.current * 60) {
           clearInterval(timerRef.current);
           setFinished(true);
-          // bell + stop
           if (masterGainRef.current && audioCtxRef.current) {
             playBell(audioCtxRef.current, volumeRef.current);
             masterGainRef.current.gain.setValueAtTime(masterGainRef.current.gain.value, audioCtxRef.current.currentTime);
@@ -277,240 +266,277 @@ export default function ZelandSound() {
   const remaining = Math.max(0, duration * 60 - elapsed);
   const formatTime = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
   const progress = isPlaying ? (elapsed / (duration * 60)) * 100 : 0;
-
-  // Countdown ring
-  const R = 54;
+  const R = 70;
   const CIRC = 2 * Math.PI * R;
   const dash = isPlaying ? CIRC * (1 - progress / 100) : CIRC;
   const ringColor = activePreset?.glow || "#A78BFA";
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "linear-gradient(135deg, #0a0a0f 0%, #0d0d1a 50%, #0a0f0a 100%)",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
-      fontFamily: "'Inter', system-ui, sans-serif",
-      padding: "24px 16px",
-      color: "#e2e8f0",
-    }}>
+    <div className="root">
+      <div className="layout">
 
-      {/* Header */}
-      <div style={{ textAlign: "center", marginBottom: "32px" }}>
-        <div style={{ fontSize: "11px", letterSpacing: "4px", color: "#64748b", textTransform: "uppercase", marginBottom: "10px" }}>
-          Transurfing · Звуковий простір
-        </div>
-        <h1 style={{ fontSize: "26px", fontWeight: "300", margin: 0, color: "#f1f5f9", letterSpacing: "-0.5px" }}>
-          Поле для констатації
-        </h1>
-      </div>
+        {/* LEFT COLUMN */}
+        <div className="left-col">
+          {/* Header */}
+          <div className="header">
+            <div className="eyebrow">Transurfing · Звуковий простір</div>
+            <h1 className="title">Поле для констатації</h1>
+            <p className="subtitle">Бінауральні ритми · Фоновий шум · Намір без бажання</p>
+          </div>
 
-      {/* Countdown ring */}
-      <div style={{ position: "relative", width: "140px", height: "140px", marginBottom: "32px", flexShrink: 0 }}>
-        <svg width="140" height="140" style={{ transform: "rotate(-90deg)" }}>
-          <circle cx="70" cy="70" r={R} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="6" />
-          <circle
-            cx="70" cy="70" r={R}
-            fill="none"
-            stroke={finished ? "#34D399" : ringColor}
-            strokeWidth="6"
-            strokeLinecap="round"
-            strokeDasharray={CIRC}
-            strokeDashoffset={dash}
-            style={{ transition: "stroke-dashoffset 1s linear, stroke 0.5s" }}
-          />
-        </svg>
-        <div style={{
-          position: "absolute", inset: 0,
-          display: "flex", flexDirection: "column",
-          alignItems: "center", justifyContent: "center",
-        }}>
-          {finished ? (
-            <div style={{ fontSize: "28px", animation: "bellPulse 1s ease-in-out 3" }}>🔔</div>
-          ) : isPlaying ? (
-            <>
-              <span style={{ fontSize: "28px", fontWeight: "200", fontVariantNumeric: "tabular-nums", letterSpacing: "-1px", color: "#f1f5f9" }}>
-                {formatTime(remaining)}
-              </span>
-              <span style={{ fontSize: "10px", color: "#475569", marginTop: "2px" }}>залишилось</span>
-            </>
-          ) : (
-            <>
-              <span style={{ fontSize: "28px", fontWeight: "200", color: "#334155" }}>{duration}</span>
-              <span style={{ fontSize: "11px", color: "#334155" }}>хвилин</span>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Presets */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "10px", width: "100%", maxWidth: "440px", marginBottom: "24px" }}>
-        {PRESETS.map((preset) => {
-          const active = isPlaying && activePreset?.id === preset.id;
-          return (
-            <button
-              key={preset.id}
-              onClick={() => handlePreset(preset)}
-              style={{
-                background: active ? `linear-gradient(135deg, ${preset.color}22, ${preset.color}11)` : "rgba(255,255,255,0.03)",
-                border: `1px solid ${active ? preset.color + "66" : "rgba(255,255,255,0.07)"}`,
-                borderRadius: "16px",
-                padding: "18px 20px",
-                cursor: "pointer",
-                textAlign: "left",
-                transition: "all 0.3s ease",
-                boxShadow: active ? `0 0 24px ${preset.glow}22` : "none",
-                position: "relative",
-                overflow: "hidden",
-              }}
-            >
-              {active && (
-                <div style={{
-                  position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-                  background: `radial-gradient(ellipse at 20% 50%, ${preset.glow}08 0%, transparent 70%)`,
-                  pointerEvents: "none",
-                }} />
-              )}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                    <span style={{ fontSize: "15px", fontWeight: "500", color: active ? preset.glow : "#cbd5e1" }}>
-                      {preset.name}
-                    </span>
-                    <span style={{
-                      fontSize: "10px",
-                      color: active ? preset.glow : "#475569",
-                      background: active ? `${preset.color}22` : "rgba(255,255,255,0.05)",
-                      padding: "2px 8px",
-                      borderRadius: "20px",
-                      border: `1px solid ${active ? preset.color + "44" : "transparent"}`,
-                    }}>
-                      {preset.subtitle}
-                    </span>
-                  </div>
-                  <p style={{ margin: 0, fontSize: "12px", color: "#64748b", lineHeight: "1.5" }}>
-                    {preset.description}
-                  </p>
-                </div>
-                <div style={{
-                  width: "32px", height: "32px", borderRadius: "50%",
-                  border: `1.5px solid ${active ? preset.glow : "#334155"}`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  marginLeft: "14px", flexShrink: 0,
-                  background: active ? `${preset.color}33` : "transparent",
-                  transition: "all 0.3s",
-                }}>
-                  {active ? (
-                    <div style={{ display: "flex", gap: "2px", alignItems: "center" }}>
-                      {[0, 1, 2].map(i => (
-                        <div key={i} style={{
-                          width: "2px", background: preset.glow, borderRadius: "2px",
-                          animation: `wave 0.8s ease-in-out ${i * 0.15}s infinite alternate`,
-                          height: `${8 + i * 3}px`,
-                        }} />
-                      ))}
-                    </div>
-                  ) : (
-                    <div style={{ width: 0, height: 0, borderStyle: "solid", borderWidth: "5px 0 5px 9px", borderColor: "transparent transparent transparent #64748b", marginLeft: "2px" }} />
+          {/* Presets */}
+          <div className="presets">
+            {PRESETS.map((preset) => {
+              const active = isPlaying && activePreset?.id === preset.id;
+              return (
+                <button
+                  key={preset.id}
+                  onClick={() => handlePreset(preset)}
+                  className="preset-btn"
+                  style={{
+                    background: active ? `linear-gradient(135deg, ${preset.color}22, ${preset.color}11)` : "rgba(255,255,255,0.03)",
+                    border: `1px solid ${active ? preset.color + "66" : "rgba(255,255,255,0.07)"}`,
+                    boxShadow: active ? `0 0 32px ${preset.glow}18` : "none",
+                  }}
+                >
+                  {active && (
+                    <div style={{
+                      position: "absolute", inset: 0,
+                      background: `radial-gradient(ellipse at 15% 50%, ${preset.glow}08 0%, transparent 65%)`,
+                      pointerEvents: "none",
+                    }} />
                   )}
-                </div>
+                  <div className="preset-inner">
+                    <div className="preset-text">
+                      <div className="preset-name-row">
+                        <span style={{ fontSize: "15px", fontWeight: "500", color: active ? preset.glow : "#cbd5e1" }}>
+                          {preset.name}
+                        </span>
+                        <span className="preset-tag" style={{
+                          color: active ? preset.glow : "#475569",
+                          background: active ? `${preset.color}22` : "rgba(255,255,255,0.05)",
+                          border: `1px solid ${active ? preset.color + "44" : "transparent"}`,
+                        }}>
+                          {preset.subtitle}
+                        </span>
+                      </div>
+                      <p className="preset-desc">{preset.description}</p>
+                    </div>
+                    <div className="preset-icon" style={{
+                      border: `1.5px solid ${active ? preset.glow : "#334155"}`,
+                      background: active ? `${preset.color}33` : "transparent",
+                    }}>
+                      {active ? (
+                        <div style={{ display: "flex", gap: "2px", alignItems: "center" }}>
+                          {[0, 1, 2].map(i => (
+                            <div key={i} style={{
+                              width: "2px", background: preset.glow, borderRadius: "2px",
+                              animation: `wave 0.8s ease-in-out ${i * 0.15}s infinite alternate`,
+                              height: `${8 + i * 3}px`,
+                            }} />
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ width: 0, height: 0, borderStyle: "solid", borderWidth: "5px 0 5px 9px", borderColor: "transparent transparent transparent #64748b", marginLeft: "2px" }} />
+                      )}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Quote */}
+          <div className="quote-block" style={{ opacity: quoteFade ? 1 : 0 }}>
+            <div className="section-label">Цитата</div>
+            <p className="quote-text">«{QUOTES[quoteIndex].text}»</p>
+            <div className="quote-footer">
+              <span className="quote-source">{QUOTES[quoteIndex].source}</span>
+              <button onClick={nextQuote} className="quote-btn">інша →</button>
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN */}
+        <div className="right-col">
+          {/* Ring */}
+          <div className="ring-wrap">
+            <svg width="180" height="180" style={{ transform: "rotate(-90deg)" }}>
+              <circle cx="90" cy="90" r={R} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="7" />
+              <circle
+                cx="90" cy="90" r={R}
+                fill="none"
+                stroke={finished ? "#34D399" : ringColor}
+                strokeWidth="7"
+                strokeLinecap="round"
+                strokeDasharray={CIRC}
+                strokeDashoffset={dash}
+                style={{ transition: "stroke-dashoffset 1s linear, stroke 0.5s" }}
+              />
+            </svg>
+            <div className="ring-center">
+              {finished ? (
+                <div style={{ fontSize: "36px", animation: "bellPulse 1s ease-in-out 3" }}>🔔</div>
+              ) : isPlaying ? (
+                <>
+                  <span className="ring-time">{formatTime(remaining)}</span>
+                  <span className="ring-label">залишилось</span>
+                </>
+              ) : (
+                <>
+                  <span className="ring-idle-num">{duration}</span>
+                  <span className="ring-idle-label">хвилин</span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Controls card */}
+          <div className="controls-card">
+            {/* Volume */}
+            <div className="control-row">
+              <div className="control-header">
+                <span className="control-label">Гучність</span>
+                <span className="control-value">{Math.round(volume * 100)}%</span>
               </div>
-            </button>
-          );
-        })}
-      </div>
+              <input
+                type="range" min="0" max="1" step="0.01"
+                value={volume}
+                onChange={(e) => setVolume(parseFloat(e.target.value))}
+                style={{ width: "100%", accentColor: activePreset?.color || "#7C3AED" }}
+              />
+            </div>
 
-      {/* Controls */}
-      <div style={{
-        width: "100%", maxWidth: "440px",
-        background: "rgba(255,255,255,0.02)",
-        border: "1px solid rgba(255,255,255,0.06)",
-        borderRadius: "16px",
-        padding: "20px 24px",
-      }}>
-        {/* Volume */}
-        <div style={{ marginBottom: "16px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-            <span style={{ fontSize: "12px", color: "#64748b" }}>Гучність</span>
-            <span style={{ fontSize: "12px", color: "#94a3b8" }}>{Math.round(volume * 100)}%</span>
+            {/* Duration */}
+            <div className="control-row" style={{ marginBottom: 0 }}>
+              <div className="control-header">
+                <span className="control-label">Тривалість</span>
+                <span className="control-value">{duration} хв</span>
+              </div>
+              <div className="duration-btns">
+                {[5, 10, 15, 20, 30].map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => { setDuration(m); durationRef.current = m; if (isPlaying) setElapsed(0); }}
+                    className="dur-btn"
+                    style={{
+                      border: `1px solid ${duration === m ? (activePreset?.color || "#7C3AED") + "66" : "rgba(255,255,255,0.07)"}`,
+                      background: duration === m ? (activePreset?.color || "#7C3AED") + "22" : "transparent",
+                      color: duration === m ? "#e2e8f0" : "#64748b",
+                    }}
+                  >{m}</button>
+                ))}
+              </div>
+            </div>
           </div>
-          <input
-            type="range" min="0" max="1" step="0.01"
-            value={volume}
-            onChange={(e) => setVolume(parseFloat(e.target.value))}
-            style={{ width: "100%", accentColor: activePreset?.color || "#7C3AED", cursor: "pointer" }}
-          />
-        </div>
 
-        {/* Duration */}
-        <div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-            <span style={{ fontSize: "12px", color: "#64748b" }}>Тривалість</span>
-            <span style={{ fontSize: "12px", color: "#94a3b8" }}>{duration} хв</span>
-          </div>
-          <div style={{ display: "flex", gap: "8px" }}>
-            {[5, 10, 15, 20, 30].map((m) => (
-              <button
-                key={m}
-                onClick={() => {
-                  setDuration(m);
-                  durationRef.current = m;
-                  if (isPlaying) setElapsed(0);
-                }}
-                style={{
-                  flex: 1, padding: "7px",
-                  borderRadius: "8px",
-                  border: `1px solid ${duration === m ? (activePreset?.color || "#7C3AED") + "66" : "rgba(255,255,255,0.07)"}`,
-                  background: duration === m ? (activePreset?.color || "#7C3AED") + "22" : "transparent",
-                  color: duration === m ? "#e2e8f0" : "#64748b",
-                  fontSize: "12px", cursor: "pointer",
-                }}
-              >{m}</button>
-            ))}
-          </div>
+          {/* Tip */}
+          <p className="tip">
+            🎧 Навушники обов'язкові<br />
+            <em>Констатуй, не благай — дзвін сповістить про кінець</em>
+          </p>
         </div>
-      </div>
-
-      {/* Quote */}
-      <div style={{
-        width: "100%", maxWidth: "440px",
-        marginTop: "16px",
-        background: "rgba(255,255,255,0.02)",
-        border: "1px solid rgba(255,255,255,0.06)",
-        borderRadius: "16px",
-        padding: "20px 24px",
-        opacity: quoteFade ? 1 : 0,
-        transition: "opacity 0.3s ease",
-      }}>
-        <div style={{ fontSize: "10px", letterSpacing: "3px", color: "#334155", textTransform: "uppercase", marginBottom: "12px" }}>Цитата</div>
-        <p style={{ margin: "0 0 12px", fontSize: "14px", color: "#94a3b8", lineHeight: "1.7", fontWeight: "300", fontStyle: "italic" }}>
-          «{QUOTES[quoteIndex].text}»
-        </p>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: "11px", color: "#334155" }}>{QUOTES[quoteIndex].source}</span>
-          <button onClick={nextQuote} style={{
-            background: "rgba(255,255,255,0.04)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            borderRadius: "8px",
-            color: "#475569",
-            fontSize: "11px",
-            padding: "5px 12px",
-            cursor: "pointer",
-          }}>інша →</button>
-        </div>
-      </div>
-
-      {/* Tip */}
-      <div style={{ maxWidth: "440px", marginTop: "20px", textAlign: "center" }}>
-        <p style={{ fontSize: "11px", color: "#1e293b", lineHeight: "1.7", margin: 0 }}>
-          🎧 Навушники обов'язкові · Пиши в теперішньому часі<br />
-          <em style={{ color: "#334155" }}>Констатуй, не благай — дзвін сповістить про кінець</em>
-        </p>
       </div>
 
       <style>{`
+        * { box-sizing: border-box; }
+        .root {
+          min-height: 100vh;
+          background: linear-gradient(135deg, #0a0a0f 0%, #0d0d1a 50%, #0a0f0a 100%);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-family: 'Inter', system-ui, sans-serif;
+          color: #e2e8f0;
+          padding: 40px 24px;
+        }
+        .layout {
+          width: 100%;
+          max-width: 900px;
+          display: grid;
+          grid-template-columns: 1fr 320px;
+          gap: 40px;
+          align-items: start;
+        }
+        .left-col { display: flex; flex-direction: column; gap: 20px; }
+        .right-col { display: flex; flex-direction: column; align-items: center; gap: 20px; position: sticky; top: 40px; }
+
+        /* Header */
+        .eyebrow { font-size: 11px; letter-spacing: 4px; color: #334155; text-transform: uppercase; margin-bottom: 10px; }
+        .title { font-size: 32px; font-weight: 300; margin: 0 0 6px; color: #f1f5f9; letter-spacing: -0.5px; }
+        .subtitle { font-size: 13px; color: #475569; margin: 0; }
+
+        /* Presets */
+        .presets { display: flex; flex-direction: column; gap: 10px; }
+        .preset-btn {
+          position: relative; overflow: hidden;
+          border-radius: 16px; padding: 18px 20px;
+          cursor: pointer; text-align: left;
+          transition: all 0.3s ease;
+        }
+        .preset-inner { display: flex; align-items: center; justify-content: space-between; }
+        .preset-text { flex: 1; }
+        .preset-name-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; flex-wrap: wrap; }
+        .preset-tag { font-size: 10px; padding: 2px 8px; border-radius: 20px; }
+        .preset-desc { margin: 0; font-size: 12px; color: #64748b; line-height: 1.55; }
+        .preset-icon {
+          width: 34px; height: 34px; border-radius: 50%;
+          display: flex; align-items: center; justify-content: center;
+          margin-left: 16px; flex-shrink: 0; transition: all 0.3s;
+        }
+
+        /* Quote */
+        .quote-block {
+          background: rgba(255,255,255,0.02);
+          border: 1px solid rgba(255,255,255,0.06);
+          border-radius: 16px; padding: 22px 24px;
+          transition: opacity 0.3s ease;
+        }
+        .section-label { font-size: 10px; letter-spacing: 3px; color: #334155; text-transform: uppercase; margin-bottom: 14px; }
+        .quote-text { margin: 0 0 14px; font-size: 15px; color: #94a3b8; line-height: 1.75; font-weight: 300; font-style: italic; }
+        .quote-footer { display: flex; justify-content: space-between; align-items: center; }
+        .quote-source { font-size: 11px; color: #334155; }
+        .quote-btn {
+          background: rgba(255,255,255,0.04);
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 8px; color: #475569;
+          font-size: 11px; padding: 5px 14px; cursor: pointer;
+          transition: all 0.2s;
+        }
+        .quote-btn:hover { color: #94a3b8; border-color: rgba(255,255,255,0.14); }
+
+        /* Ring */
+        .ring-wrap { position: relative; width: 180px; height: 180px; flex-shrink: 0; }
+        .ring-center {
+          position: absolute; inset: 0;
+          display: flex; flex-direction: column;
+          align-items: center; justify-content: center;
+        }
+        .ring-time { font-size: 34px; font-weight: 200; font-variant-numeric: tabular-nums; letter-spacing: -1px; color: #f1f5f9; }
+        .ring-label { font-size: 10px; color: #475569; margin-top: 2px; }
+        .ring-idle-num { font-size: 34px; font-weight: 200; color: #334155; }
+        .ring-idle-label { font-size: 11px; color: #334155; }
+
+        /* Controls */
+        .controls-card {
+          width: 100%;
+          background: rgba(255,255,255,0.02);
+          border: 1px solid rgba(255,255,255,0.06);
+          border-radius: 16px; padding: 20px 22px;
+        }
+        .control-row { margin-bottom: 16px; }
+        .control-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
+        .control-label { font-size: 12px; color: #64748b; }
+        .control-value { font-size: 12px; color: #94a3b8; }
+        .duration-btns { display: flex; gap: 6px; }
+        .dur-btn { flex: 1; padding: 7px 4px; border-radius: 8px; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+
+        .tip { font-size: 11px; color: #1e293b; line-height: 1.7; text-align: center; margin: 0; }
+        .tip em { color: #334155; }
+
+        input[type=range] { -webkit-appearance: none; width: 100%; height: 3px; background: rgba(255,255,255,0.08); border-radius: 2px; outline: none; cursor: pointer; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #7C3AED; cursor: pointer; }
+
         @keyframes wave {
           from { transform: scaleY(0.5); }
           to { transform: scaleY(1.5); }
@@ -519,8 +545,19 @@ export default function ZelandSound() {
           0%, 100% { transform: scale(1); }
           50% { transform: scale(1.3); }
         }
-        input[type=range] { -webkit-appearance: none; height: 3px; background: rgba(255,255,255,0.08); border-radius: 2px; outline: none; }
-        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #7C3AED; cursor: pointer; }
+
+        /* Mobile */
+        @media (max-width: 680px) {
+          .layout {
+            grid-template-columns: 1fr;
+            gap: 24px;
+          }
+          .right-col { position: static; width: 100%; }
+          .ring-wrap { width: 140px; height: 140px; }
+          .ring-time { font-size: 26px; }
+          .ring-idle-num { font-size: 26px; }
+          .title { font-size: 24px; }
+        }
       `}</style>
     </div>
   );
