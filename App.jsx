@@ -57,12 +57,14 @@ const PRESETS = [
   },
 ];
 
-function createPinkNoise(ctx) {
-  const bufferSize = 4096;
-  let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
-  const node = ctx.createScriptProcessor(bufferSize, 1, 1);
-  node.onaudioprocess = (e) => {
-    const out = e.outputBuffer.getChannelData(0);
+function createNoiseSource(ctx, type) {
+  const sampleRate = ctx.sampleRate;
+  const bufferSize = sampleRate * 4; // 4 seconds looped
+  const buffer = ctx.createBuffer(1, bufferSize, sampleRate);
+  const data = buffer.getChannelData(0);
+
+  if (type === "pink") {
+    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
     for (let i = 0; i < bufferSize; i++) {
       const white = Math.random() * 2 - 1;
       b0 = 0.99886 * b0 + white * 0.0555179;
@@ -71,27 +73,23 @@ function createPinkNoise(ctx) {
       b3 = 0.86650 * b3 + white * 0.3104856;
       b4 = 0.55000 * b4 + white * 0.5329522;
       b5 = -0.7616 * b5 - white * 0.0168980;
-      out[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
+      data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
       b6 = white * 0.115926;
     }
-  };
-  return node;
-}
-
-function createBrownNoise(ctx) {
-  const bufferSize = 4096;
-  let last = 0;
-  const node = ctx.createScriptProcessor(bufferSize, 1, 1);
-  node.onaudioprocess = (e) => {
-    const out = e.outputBuffer.getChannelData(0);
+  } else {
+    let last = 0;
     for (let i = 0; i < bufferSize; i++) {
       const white = Math.random() * 2 - 1;
-      out[i] = (last + 0.02 * white) / 1.02;
-      last = out[i];
-      out[i] *= 3.5;
+      data[i] = (last + 0.02 * white) / 1.02;
+      last = data[i];
+      data[i] *= 3.5;
     }
-  };
-  return node;
+  }
+
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.loop = true;
+  return source;
 }
 
 function playBell(ctx, volume = 0.5) {
@@ -238,7 +236,7 @@ export default function ZelandSound() {
 
     merger.connect(master);
 
-    const noiseNode = preset.noise === "brown" ? createBrownNoise(ctx) : createPinkNoise(ctx);
+    const noiseNode = createNoiseSource(ctx, preset.noise);
     const noiseGain = ctx.createGain();
     noiseGain.gain.value = preset.noiseVolume;
     noiseNode.connect(noiseGain);
@@ -246,7 +244,8 @@ export default function ZelandSound() {
 
     leftOsc.start();
     rightOsc.start();
-    nodesRef.current = [leftOsc, rightOsc, { disconnect: () => { noiseNode.disconnect(); noiseGain.disconnect(); } }];
+    noiseNode.start();
+    nodesRef.current = [leftOsc, rightOsc, noiseNode, { disconnect: () => { noiseGain.disconnect(); } }];
 
     setIsPlaying(true);
     setTimeout(() => requestWakeLock(), 500);
