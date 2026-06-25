@@ -213,6 +213,8 @@ export default function ZelandSound() {
 
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     audioCtxRef.current = ctx;
+    // iOS requires resume() after creation, but ctx must be created synchronously on tap
+    ctx.resume().catch(() => {});
 
     const master = ctx.createGain();
     master.gain.value = volumeRef.current;
