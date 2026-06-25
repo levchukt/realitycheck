@@ -36,38 +36,42 @@ const PRESETS = [
   },
 ];
 
-// Generate noise into an AudioBuffer and loop it — works on iOS Safari
-function createNoiseBuffer(ctx, type) {
-  const rate = ctx.sampleRate;
-  const buf = ctx.createBuffer(1, rate * 3, rate);
-  const d = buf.getChannelData(0);
-  if (type === "pink") {
-    let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
-    for (let i = 0; i < d.length; i++) {
+function createPinkNoise(ctx) {
+  const bufferSize = 4096;
+  let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+  const node = ctx.createScriptProcessor(bufferSize, 1, 1);
+  node.onaudioprocess = (e) => {
+    const out = e.outputBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
       const w = Math.random()*2-1;
       b0=0.99886*b0+w*0.0555179; b1=0.99332*b1+w*0.0750759;
       b2=0.96900*b2+w*0.1538520; b3=0.86650*b3+w*0.3104856;
       b4=0.55000*b4+w*0.5329522; b5=-0.7616*b5-w*0.0168980;
-      d[i]=(b0+b1+b2+b3+b4+b5+b6+w*0.5362)*0.11; b6=w*0.115926;
+      out[i]=(b0+b1+b2+b3+b4+b5+b6+w*0.5362)*0.11; b6=w*0.115926;
     }
-  } else {
-    let last=0;
-    for (let i = 0; i < d.length; i++) {
+  };
+  return node;
+}
+
+function createBrownNoise(ctx) {
+  const bufferSize = 4096;
+  let last = 0;
+  const node = ctx.createScriptProcessor(bufferSize, 1, 1);
+  node.onaudioprocess = (e) => {
+    const out = e.outputBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
       const w = Math.random()*2-1;
-      d[i]=(last+0.02*w)/1.02; last=d[i]; d[i]*=3.5;
+      out[i]=(last+0.02*w)/1.02; last=out[i]; out[i]*=3.5;
     }
-  }
-  const src = ctx.createBufferSource();
-  src.buffer = buf;
-  src.loop = true;
-  return src;
+  };
+  return node;
 }
 
 function playBell(ctx, vol = 0.5) {
   const now = ctx.currentTime;
   [{freq:432,gain:0.5,decay:4},{freq:864,gain:0.25,decay:2.5},{freq:1188,gain:0.12,decay:1.5}]
     .forEach(({freq,gain,decay}) => {
-      const o = ctx.createOscillator(), g = ctx.createGain();
+      const o=ctx.createOscillator(), g=ctx.createGain();
       o.type="sine"; o.frequency.value=freq;
       g.gain.setValueAtTime(gain*vol,now);
       g.gain.exponentialRampToValueAtTime(0.0001,now+decay);
@@ -97,30 +101,25 @@ export default function ZelandSound() {
   useEffect(() => { durationRef.current = duration; }, [duration]);
   useEffect(() => { volumeRef.current = volume; }, [volume]);
 
-  // Wake Lock — повністю окремо від аудіо, тільки через useEffect
+  // Wake Lock — повністю окремо від аудіо
   useEffect(() => {
     if (!('wakeLock' in navigator)) return;
     if (isPlaying) {
-      navigator.wakeLock.request('screen').then(lock => {
-        wakeLockRef.current = lock;
-      }).catch(() => {});
+      navigator.wakeLock.request('screen')
+        .then(lock => { wakeLockRef.current = lock; })
+        .catch(() => {});
     } else {
       wakeLockRef.current?.release().catch(() => {});
       wakeLockRef.current = null;
     }
-    return () => {
-      wakeLockRef.current?.release().catch(() => {});
-      wakeLockRef.current = null;
-    };
   }, [isPlaying]);
 
-  // Re-acquire wake lock if user returns to tab
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === 'visible' && isPlaying && 'wakeLock' in navigator) {
-        navigator.wakeLock.request('screen').then(lock => {
-          wakeLockRef.current = lock;
-        }).catch(() => {});
+        navigator.wakeLock.request('screen')
+          .then(lock => { wakeLockRef.current = lock; })
+          .catch(() => {});
       }
     };
     document.addEventListener('visibilitychange', onVisible);
@@ -177,7 +176,6 @@ export default function ZelandSound() {
     master.connect(ctx.destination);
     masterGainRef.current = master;
 
-    // Binaural — left
     const lOsc = ctx.createOscillator();
     lOsc.frequency.value = preset.carrier;
     lOsc.type = "sine";
@@ -187,7 +185,6 @@ export default function ZelandSound() {
     lOsc.connect(lGain);
     lGain.connect(merger, 0, 0);
 
-    // Binaural — right
     const rOsc = ctx.createOscillator();
     rOsc.frequency.value = preset.carrier + preset.beat;
     rOsc.type = "sine";
@@ -198,15 +195,15 @@ export default function ZelandSound() {
 
     merger.connect(master);
 
-    // Noise via AudioBuffer (iOS-compatible)
-    const noise = createNoiseBuffer(ctx, preset.noise);
+    const noiseNode = preset.noise === "brown" ? createBrownNoise(ctx) : createPinkNoise(ctx);
     const noiseGain = ctx.createGain();
     noiseGain.gain.value = preset.noiseVolume;
-    noise.connect(noiseGain);
+    noiseNode.connect(noiseGain);
     noiseGain.connect(master);
 
-    lOsc.start(); rOsc.start(); noise.start();
-    nodesRef.current = [lOsc, rOsc, noise];
+    lOsc.start();
+    rOsc.start();
+    nodesRef.current = [lOsc, rOsc, { stop: () => {}, disconnect: () => { noiseNode.disconnect(); noiseGain.disconnect(); } }];
 
     setIsPlaying(true);
 
@@ -259,7 +256,6 @@ export default function ZelandSound() {
   return (
     <div className="root">
       <div className="layout">
-        {/* LEFT */}
         <div className="left-col">
           <div className="header">
             <div className="eyebrow">Transurfing · Звуковий простір</div>
@@ -310,7 +306,6 @@ export default function ZelandSound() {
           </div>
         </div>
 
-        {/* RIGHT */}
         <div className="right-col">
           <div className="ring-wrap">
             <svg width="180" height="180" style={{transform:"rotate(-90deg)"}}>
@@ -376,7 +371,7 @@ export default function ZelandSound() {
         .quote-footer{display:flex;justify-content:space-between;align-items:center}
         .quote-source{font-size:11px;color:#334155}
         .quote-btn{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:#475569;font-size:11px;padding:5px 14px;cursor:pointer;transition:all 0.2s}
-        .quote-btn:hover{color:#94a3b8;border-color:rgba(255,255,255,0.14)}
+        .quote-btn:hover{color:#94a3b8}
         .ring-wrap{position:relative;width:180px;height:180px;flex-shrink:0}
         .ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
         .ring-time{font-size:34px;font-weight:200;font-variant-numeric:tabular-nums;letter-spacing:-1px;color:#f1f5f9}
@@ -400,8 +395,7 @@ export default function ZelandSound() {
           .layout{grid-template-columns:1fr;gap:24px}
           .right-col{position:static;width:100%}
           .ring-wrap{width:140px;height:140px}
-          .ring-time{font-size:26px}
-          .ring-idle-num{font-size:26px}
+          .ring-time,.ring-idle-num{font-size:26px}
           .title{font-size:24px}
         }
       `}</style>
